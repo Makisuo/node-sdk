@@ -18,15 +18,7 @@ import type { ChildProcess } from 'child_process'
 import { Tier, TierGetClientOptions } from './client.js'
 
 // just use node-fetch as a polyfill for old node environments
-let fetchPromise: Promise<void> | null = null
 let FETCH = globalThis.fetch
-if (typeof FETCH !== 'function') {
-  fetchPromise = import('isomorphic-unfetch').then(f => {
-    //@ts-ignore
-    FETCH = f.default
-    fetchPromise = null
-  })
-}
 
 // fill-in for browser bundlers
 /* c8 ignore start */
