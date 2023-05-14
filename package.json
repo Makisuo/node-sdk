@@ -1,6 +1,6 @@
 {
-  "name": "tier",
-  "version": "5.9.0",
+  "name": "tier-v8",
+  "version": "6.0.0",
   "files": [
     "dist"
   ],

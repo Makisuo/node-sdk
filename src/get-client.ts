@@ -49,16 +49,11 @@ const PROCESS =
     : process
 /* c8 ignore start */
 
-const port = 10000 + (PROCESS.pid % 10000)
 let sidecarPID: number | undefined
-let initting: undefined | Promise<void>
 
 const debug =
   PROCESS.env.TIER_DEBUG === '1' ||
   /\btier\b/i.test(PROCESS.env.NODE_DEBUG || '')
-const debugLog = debug
-  ? (...m: any[]) => console.error('tier:', ...m)
-  : () => {}
 
 export const getClient = async (
   clientOptions: TierGetClientOptions = {}
@@ -67,12 +62,9 @@ export const getClient = async (
   let { baseURL = TIER_BASE_URL, apiKey = TIER_API_KEY } = clientOptions
   baseURL = baseURL || (apiKey ? 'https://api.tier.run' : undefined)
   if (!baseURL) {
-    await init()
-    baseURL = PROCESS.env.TIER_BASE_URL
+    throw new Error('need to set TIER_API_KEY')
   }
-  if (!baseURL) {
-    throw new Error('failed sidecar initialization')
-  }
+
   return new Tier({
     debug,
     fetchImpl: FETCH,
@@ -85,7 +77,6 @@ export const getClient = async (
 // evade clever bundlers that try to import child_process for the client
 // insist that this is always a dynamic import, even though we don't
 // actually ever set this to any different value.
-let child_process: string = 'child_process'
 
 /**
  * Initialize the Tier sidecar.
@@ -94,68 +85,6 @@ let child_process: string = 'child_process'
  *
  * @internal
  */
-export const init = async () => {
-  /* c8 ignore start */
-  if (!FETCH) {
-    await fetchPromise
-    if (!FETCH) {
-      throw new Error('could not find a fetch implementation')
-    }
-  }
-  /* c8 ignore stop */
-
-  if (sidecarPID || PROCESS.env.TIER_BASE_URL) {
-    return
-  }
-  if (initting) {
-    return initting
-  }
-  initting = import(child_process)
-    .then(({ spawn }) => {
-      const args = PROCESS.env.TIER_LIVE === '1' ? ['--live'] : []
-      const env = Object.fromEntries(Object.entries(PROCESS.env))
-      if (debug) {
-        args.push('-v')
-        env.STRIPE_DEBUG = '1'
-      }
-      args.push('serve', '--addr', `127.0.0.1:${port}`)
-      debugLog(args)
-      return new Promise<ChildProcess>((res, rej) => {
-        let proc = spawn('tier', args, {
-          env,
-          stdio: ['ignore', 'pipe', 'inherit'],
-        })
-        proc.on('error', rej)
-        /* c8 ignore start */
-        if (!proc || !proc.stdout) {
-          return rej(new Error('failed to start tier sidecar'))
-        }
-        /* c8 ignore stop */
-        proc.stdout.on('data', () => res(proc))
-      })
-    })
-    .then(proc => {
-      debugLog('started sidecar', proc.pid)
-      proc.on('exit', () => {
-        debugLog('sidecar closed', sidecarPID)
-        sidecarPID = undefined
-        delete PROCESS.env.TIER_BASE_URL
-        PROCESS.removeListener('exit', exitHandler)
-      })
-      PROCESS.on('exit', exitHandler)
-      proc.unref()
-      PROCESS.env.TIER_BASE_URL = `http://127.0.0.1:${port}`
-      sidecarPID = proc.pid
-      initting = undefined
-    })
-    .catch(er => {
-      debugLog('sidecar error', er)
-      initting = undefined
-      sidecarPID = undefined
-      throw er
-    })
-  return initting
-}
 
 /**
  * Method to shut down the auto-started sidecar process on
